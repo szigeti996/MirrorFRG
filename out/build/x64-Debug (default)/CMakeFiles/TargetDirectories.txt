@@ -1,0 +1,5 @@
+C:/Users/szige/source/repos/MirrorFRG/out/build/x64-Debug (default)/CMakeFiles/edit_cache.dir
+C:/Users/szige/source/repos/MirrorFRG/out/build/x64-Debug (default)/CMakeFiles/rebuild_cache.dir
+C:/Users/szige/source/repos/MirrorFRG/out/build/x64-Debug (default)/MirrorFRG/CMakeFiles/rebuild_cache.dir
+C:/Users/szige/source/repos/MirrorFRG/out/build/x64-Debug (default)/MirrorFRG/CMakeFiles/Unitsv1.dir
+C:/Users/szige/source/repos/MirrorFRG/out/build/x64-Debug (default)/MirrorFRG/CMakeFiles/edit_cache.dir
