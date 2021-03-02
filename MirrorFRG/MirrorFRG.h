@@ -1,25 +1,37 @@
 ﻿// MirrorFRG.h : Include file for standard system include files,
 // or project specific include files.
 
-#pragma once
-
 #include <iostream>
 #include <cmath>
 #include <array> 
 #include <string>
 
-const int n = 320;
-const int n2 = 160;
+#include "Interpolation.h"
+
+#include <gsl/gsl_spline.h>
+#include <gsl/gsl_deriv.h>
+#include <gsl/gsl_errno.h>
+#include <gsl/gsl_math.h>
+
+#define GSL_FN_EVAL(F,x) (*((F)->function))(x,(F)->params)
+
+const int n = 400;
 const double pi = 3.14159265359;
 const double mw = 783.;
 const double EPS = 0.005;
-const double size = 15.;
+const double size = 12.;
 
 const double m0 = 185.; // MeV
 const double muc = 922.7; // MeV
 const double h1 = 17.59905821;
 const double h2 = 9.953896925;
 const double g = 9.45884097;
+
+//template<typename T> // Bose-Einstein distribution at finite temperature
+//T BoseEinstein(T omegaB){ return 1./(std::exp(omegaB/T0)-1);  }
+
+//template<typename T> //Fermi-Dirac Temperature at finite temperature
+//T FermiDirac(T omegaF, T mu){ return 1./(std::exp((omegaF-mu)/T0)-1.); }
 
 template <typename T> //square
 T sqr(T x) { return x * x; }
@@ -38,12 +50,6 @@ T Epi(T k, T Uderiv) { return std::sqrt(k * k + Uderiv); }
 
 template<typename T> //Energy of the fermions
 T Enucleon(T k, T mass) { return std::sqrt(k * k + mass * mass); }
-
-//template<typename T> // Bose-Einstein distribution at finite temperature
-//T BoseEinstein(T omegaB){ return 1./(std::exp(omegaB/T0)-1);  }
-
-//template<typename T> //Fermi-Dirac Temperature at finite temperature
-//T FermiDirac(T omegaF, T mu){ return 1./(std::exp((omegaF-mu)/T0)-1.); }
 
 template<typename T> // Bose-Einstein distribution at zero temperature
 T BoseEinsteinT0(T omegaB) {
@@ -126,97 +132,107 @@ double Root_Finder(double rho, double k, double a, double b) {
     return c;
 }
 
-double deriv(int j, int size, double step, std::array<double, n> f) { //Numerical derivation
-
-    double result;
-
-    if (j == 0) {
-        double A = (f[2] - f[0]) / (2.0 * step);
-        double B = (f[0] - 8.0 * f[1] + 8.0 * f[3] - f[4]) / (12.0 * step);
-        result = 2 * A - B;
-    }
-
-    else if (j == size - 1) {
-        double A = (f[size - 1] - f[size - 3]) / (2.0 * step);
-        double B = (f[size - 5] - 8.0 * f[size - 4] + 8.0 * f[size - 2] - f[size - 1]) / (12.0 * step);
-        result = 2 * A - B;
-    }
-
-    else if (j == 1) result = (f[2] - f[0]) / (2.0 * step);
-
-    else if (j == size - 2) result = (f[size - 1] - f[size - 3]) / (2.0 * step);
-
-    else if (j == 2) result = (f[0] - 8.0 * f[1] + 8.0 * f[3] - f[4]) / (12.0 * step);
-
-    else if (j == size - 3) result = (f[size - 5] - 8.0 * f[size - 4] + 8.0 * f[size - 2] - f[size - 1]) / (12.0 * step);
-
-    else result = (-f[j - 3] + 9.0 * f[j - 2] - 45.0 * f[j - 1] + 45.0 * f[j + 1] - 9.0 * f[j + 2] + f[j + 3]) / (60.0 * step);
-
-    return result;
-}
-
-double deriv2(int j, int size, double step, std::array<double, n2> f) { //Numerical derivation
-
-    double result;
-
-    if (j == 0) {
-        double A = (f[2] - f[0]) / (2.0 * step);
-        double B = (f[0] - 8.0 * f[1] + 8.0 * f[3] - f[4]) / (12.0 * step);
-        result = 2 * A - B;
-    }
-
-    else if (j == size - 1) {
-        double A = (f[size - 1] - f[size - 3]) / (2.0 * step);
-        double B = (f[size - 5] - 8.0 * f[size - 4] + 8.0 * f[size - 2] - f[size - 1]) / (12.0 * step);
-        result = 2 * A - B;
-    }
-
-    else if (j == 1) result = (f[2] - f[0]) / (2.0 * step);
-
-    else if (j == size - 2) result = (f[size - 1] - f[size - 3]) / (2.0 * step);
-
-    else if (j == 2) result = (f[0] - 8.0 * f[1] + 8.0 * f[3] - f[4]) / (12.0 * step);
-
-    else if (j == size - 3) result = (f[size - 5] - 8.0 * f[size - 4] + 8.0 * f[size - 2] - f[size - 1]) / (12.0 * step);
-
-    else result = (-f[j - 3] + 9.0 * f[j - 2] - 45.0 * f[j - 1] + 45.0 * f[j + 1] - 9.0 * f[j + 2] + f[j + 3]) / (60.0 * step);
-
-    return result;
-}
-
 std::array<double, n> func(double k, std::array<double, n> rho, std::array<double, n> Potential, std::array<double, n> mu) { //R.H.S of the Wetterich-flow equation
-    std::array<double, n> UDer1;
-    std::array<double, n> UDer2;
+    
     std::array<double, n> Result;
-    //std::array<double,n2> tempPot;
-    //std::array<double,n2> tempDer1;
-    //std::array<double,n2> tempDer2;
 
-    for (int i = 0; i < n; i++)
-        UDer1[i] = deriv(i, n, size, Potential);
+    double* r; r = (double*)malloc((size_t)sizeof(double) * n);
+    memset(r, 0, (size_t)sizeof(double) * n);
+    double* Pot; Pot = (double*)malloc((size_t)sizeof(double) * n);
+    memset(Pot, 0, (size_t)sizeof(double) * n);
 
-    for (int i = 0; i < n; i++)
-        UDer2[i] = deriv(i, n, size, UDer1);
-    /*
-    for(int i = 0; i < n2; i++)
-        tempPot[i] = Potential[2*i];
-
-    for(int i = 0; i < n2; i++){
-        UDer1[2*i] = deriv2(i,n2,2.*size,tempPot);
-        UDer1[2*i+1] = deriv2(i,n2,2.*size,tempPot);
-        }
-    */
-
-    std::ofstream myfile2("pelda.dat");
+    double* UDer1; UDer1 = (double*)malloc((size_t)sizeof(double) * n);
+    memset(UDer1, 0, (size_t)sizeof(double) * n);
+    double* UDer2; UDer2 = (double*)malloc((size_t)sizeof(double) * n);
+    memset(UDer2, 0, (size_t)sizeof(double) * n);
 
     for (int i = 0; i < n; i++) {
-        double Bosonterm = (1 + 2 * BoseEinsteinT0(Esigma(k, UDer1[i], UDer2[i], rho[i]))) / Esigma(k, UDer1[i], UDer2[i], rho[i]) + 3. * (1 + 2 * BoseEinsteinT0(Epi(k, UDer1[i]))) / Epi(k, UDer1[i]);
+        r[i] = rho[i];
+        Pot[i] = Potential[i];
+    }
+    
+    gsl_interp_accel* facc = gsl_interp_accel_alloc();
+    gsl_spline* fspline = gsl_spline_alloc(gsl_interp_cspline, n);
+    gsl_spline_init(fspline, r, Pot, n);
+    struct my_f_params params = { facc, fspline };
+    gsl_function F;
+    F.function = &function1;
+    F.params = &params;
+
+    double result1, abserr1;
+    gsl_deriv_forward(&F, r[0], 1., &result1, &abserr1);
+    UDer1[0] = result1;
+    
+    for (int i = 1; i < n; i++) {
+        if (i == n-1) {
+            double result, abserr;
+            gsl_deriv_backward(&F, r[i], 0.01, &result, &abserr);
+            UDer1[i] = result;
+        }
+        else {
+            double result, abserr;
+            gsl_deriv_central(&F, r[i], 0.01, &result, &abserr);
+            UDer1[i] = result;
+        }
+    }
+    
+    gsl_spline_init(fspline, r, UDer1, n);
+    struct my_f_params params1 = { facc, fspline };
+    gsl_function G;
+    G.function = &function1;
+    G.params = &params1;
+    
+    gsl_deriv_forward(&G, r[0], 1., &result1, &abserr1);
+    UDer2[0] = result1;
+
+    for (int i = 1; i < n; i++) {
+        if (i == n - 1) {
+            double result, abserr;
+            gsl_deriv_backward(&G, r[i], 0.01, &result, &abserr);
+            UDer2[i] = result;
+        }
+        else {
+            double result, abserr;
+            gsl_deriv_central(&G, r[i], 0.01, &result, &abserr);
+            UDer2[i] = result;
+        }
+    }
+   
+    const int N = 101;
+
+    double* r2; r2 = (double*)malloc((size_t)sizeof(double) * N);
+    memset(r2, 0, (size_t)sizeof(double) * N);
+    double* Es; Es = (double*)malloc((size_t)sizeof(double) * N);
+    memset(Es, 0, (size_t)sizeof(double) * N);
+
+    for (int i = 0; i < N-1; i++) {
+        int j = i * 4;
+        r2[i] = r[j];
+        Es[i] = Esigma(k, UDer1[j], UDer2[j], r[j]);
+    }
+
+    r2[N - 1] = r[n - 1];
+    Es[N - 1] = Esigma(k, UDer1[n - 1], UDer2[n - 1], r[n - 1]);
+
+    gsl_interp_accel* facc1 = gsl_interp_accel_alloc();
+    gsl_spline* fspline1 = gsl_spline_alloc(gsl_interp_cspline, N);
+    gsl_spline_init(fspline1, r2, Es, N);
+    struct my_f_params params2 = { facc1, fspline1 };
+    gsl_function H;
+    H.function = &function1;
+    H.params = &params2;
+
+    std::ofstream myfile2("pelda.dat");
+    for (int i = 0; i < n; i++) {
+        double Sigma = GSL_FN_EVAL(&H, r[i]);
+        double Bosonterm = (1 + 2 * BoseEinsteinT0(Sigma)) / Sigma + 3. * (1 + 2 * BoseEinsteinT0(Epi(k, UDer1[i]))) / Epi(k, UDer1[i]);
         double Nucleon1 = 4. / Enucleon(k, mass1(rho[i])) * (1 - FermiDiracT0(Enucleon(k, mass1(rho[i])), mu[i]) - FermiDiracT0(Enucleon(k, mass1(rho[i])), -mu[i]));
         double Nucleon2 = 4. / Enucleon(k, mass2(rho[i])) * (1 - FermiDiracT0(Enucleon(k, mass2(rho[i])), mu[i]) - FermiDiracT0(Enucleon(k, mass2(rho[i])), -mu[i]));
-        myfile2 << rho[i] << "," << UDer1[i] << "," << UDer2[i] << "," << Esigma(k, UDer1[i], UDer2[i], rho[i]) << "," << Epi(k, UDer1[i]) << "," << std::pow(k, 4) / 12. / sqr(pi) * (Bosonterm - Nucleon1 - Nucleon2) << std::endl;
+        myfile2 << rho[i] << " " << UDer1[i] << " " << UDer2[i] << " " << Sigma << " " << Epi(k, UDer1[i]) << " " << std::pow(k, 4) / 12. / sqr(pi) * (Bosonterm - Nucleon1 - Nucleon2) << std::endl;
         Result[i] = std::pow(k, 4) / 12. / sqr(pi) * (Bosonterm - Nucleon1 - Nucleon2);
     }
     myfile2.close();
+    
     return Result;
 }
 
