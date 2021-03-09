@@ -17,7 +17,7 @@ int main()
 {
     double k = 360.; //MeV
     double Lambda = 361.; //MeV
-    double dk = 1000 * 0.00001; // MeV
+    double dk = 1000 * 0.000001; // MeV
     double w0start = -90.; //Mev
 
     std::array<double, n> rho;
@@ -35,13 +35,16 @@ int main()
         tmp3.push_back(c);
     }
     
-    for (int i = 0; i < n; i++) {
-        int j = 12 * i;
+    for (int i = 0; i < n - 1; i++) {
+        int j = i * 50;
         rho[i] = tmp1[j];
         mu[i] = tmp3[j];
         U0[i] = tmp2[j];
     }
 
+    rho[n - 1] = tmp1[2199];
+    mu[n - 1] = tmp3[2199];
+    U0[n - 1] = tmp2[2199];
 
     PotentialT0 U = { rho,U0,mu };
     
